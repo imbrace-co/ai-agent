@@ -9,9 +9,6 @@ WORKDIR /app
 # Increase Node.js heap size to prevent OOM during client build (Vite bundling)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# Configure npm/pnpm to use GitLab authentication
-ARG IMBRACE_UI_TOKEN
-
 # Copy package files for better Docker layer caching
 COPY package*.json ./
 COPY server/package*.json ./server/
@@ -20,11 +17,7 @@ COPY client/package*.json ./client/
 # Copy pnpm lockfile for better caching
 COPY client/pnpm-lock.yaml ./client/
 
-# Configure authentication for GitLab npm registry
-RUN if [ -n "$IMBRACE_UI_TOKEN" ]; then \
-      echo "@imbrace:registry=https://gitlab.com/api/v4/projects/56423048/packages/npm/" >> /root/.npmrc && \
-      echo "//gitlab.com/api/v4/projects/56423048/packages/npm/:_authToken=${IMBRACE_UI_TOKEN}" >> /root/.npmrc; \
-    fi
+# @imbrace/ui is published on the public npm registry, so no auth is needed.
 
 # Install dependencies for server and client (separate RUN commands for better caching)
 # No lockfile in Docker context (see .dockerignore) so npm resolves fresh and skips
