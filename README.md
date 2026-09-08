@@ -1,6 +1,6 @@
 # AI Agent
 
-IMBrace's AI backend + web client.
+iMBrace's AI backend + web client.
 
 - **[`server/`](server/README.md)** — Express + TypeScript API (embedding, chat agent, MCP, trace,
   data-board AI). Runs on **`:7100`**. This is the service `marketplace` / `app-gateway` call into for
