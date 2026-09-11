@@ -83,3 +83,8 @@ For the API list and edition notes, see [`server/README.md`](server/README.md).
   matching Bedrock/provider configuration) to actually run.
 - **The client (`client/`) is front-end only.** `node dev-logs.mjs aiagent` starts the
   server alone; for the UI, also run `cd client && pnpm start`.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Portions are based on a template by Cole Medin;
+their original copyright is retained alongside iMBrace's.
