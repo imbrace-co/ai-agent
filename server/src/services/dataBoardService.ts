@@ -447,16 +447,34 @@ const FieldSuggestionSchema = z.object({
  *
  * @param parsedFiles - Parsed sample data (columns + rows per file)
  * @param boardSchema - Board model schema with available field types
- * @param xAccessToken - User access token for model resolution
- * @param organizationId - Organization ID for model resolution
+ * @param ocrModelOptions - Optional model override (same model the caller
+ *   selected for OCR). When present, the suggestion step reuses that model
+ *   (e.g. a Bedrock model) instead of the env-configured SUGGESTION_MODEL_* /
+ *   OpenAI default — so one model choice drives the whole pipeline. This is
+ *   what previously forced every extract through OpenAI (with an empty API key)
+ *   even when a Bedrock model was picked in the UI.
  * @returns Array of field type suggestions
  */
 export async function suggestFieldTypesWithAI(
   parsedFiles: ParsedFileData[],
   boardSchema: unknown,
+  ocrModelOptions?: OcrModelOptions,
 ): Promise<FieldTypeSuggestion[]> {
-  const model = resolveSuggestionModel();
-  const suggestionModelId = config.suggestion.modelId ?? "gpt-4o-mini";
+  let model: Parameters<typeof generateObject>[0]["model"];
+  let suggestionModelId: string;
+  if (ocrModelOptions) {
+    const resolved = await resolveImbraceModel(
+      ocrModelOptions.organizationId,
+      ocrModelOptions.xAccessToken,
+      ocrModelOptions.modelName,
+      ocrModelOptions.providerId,
+    );
+    model = resolved.model as Parameters<typeof generateObject>[0]["model"];
+    suggestionModelId = ocrModelOptions.modelName;
+  } else {
+    model = resolveSuggestionModel();
+    suggestionModelId = config.suggestion.modelId ?? "gpt-4o-mini";
+  }
 
   const systemPrompt = `You are a data schema analyst. You will receive:
 1. A board model schema listing available field types with their definitions

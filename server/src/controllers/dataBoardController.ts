@@ -34,6 +34,8 @@ const suggestFieldTypesInternalSchema = z.object({
     .array(z.string().url("Each file_url must be a valid URL"))
     .min(1, "At least one file URL is required"),
   organization_id: z.string().optional(),
+  model_name: z.string().optional(),
+  provider_id: z.string().optional(),
 });
 
 /**
@@ -172,7 +174,13 @@ export async function suggestFieldTypes(
       : INTERNAL_BOARD_MODEL_SCHEMA;
 
     // Step 3: Ask AI to suggest field types
-    const suggestions = await suggestFieldTypesWithAI(parsedFiles, boardSchema);
+    // Reuse the caller-selected model (ocrModelOptions) so a Bedrock choice
+    // drives this step too instead of falling back to OpenAI gpt-4o-mini.
+    const suggestions = await suggestFieldTypesWithAI(
+      parsedFiles,
+      boardSchema,
+      ocrModelOptions,
+    );
 
     const response: ApiResponse<FieldTypeSuggestion[]> = {
       success: true,
@@ -220,14 +228,36 @@ export async function suggestFieldTypesInternal(
       return;
     }
 
-    const { file_urls } = parseResult.data;
+    const { file_urls, model_name, provider_id, organization_id } =
+      parseResult.data;
+
+    // Resolve identity from gateway-injected headers (set by parseUserContext).
+    // The internal endpoint authenticates via x-user-id + x-organization-id, but
+    // model resolution still needs a credential + org id to call the provider.
+    const userContext = (req as any).userContext;
+    const xAccessToken = userContext?.x_access_token as string | undefined;
+    const orgId =
+      organization_id ?? (userContext?.x_org_id as string | undefined) ?? "";
 
     logger.info("Internal field type suggestion request", {
       fileCount: file_urls.length,
+      ...(model_name && provider_id ? { model_name, provider_id } : {}),
     });
 
+    // Build OCR model options when the caller supplies a specific vision model
+    // and a credential is available for provider resolution.
+    const ocrModelOptions: OcrModelOptions | undefined =
+      model_name && provider_id && xAccessToken
+        ? {
+            modelName: model_name,
+            providerId: provider_id,
+            xAccessToken,
+            organizationId: orgId,
+          }
+        : undefined;
+
     const parsedFiles = await Promise.all(
-      file_urls.map((url) => parseFileFromUrl(url)),
+      file_urls.map((url) => parseFileFromUrl(url, ocrModelOptions)),
     );
 
     logger.info("Sample files parsed (internal)", {
@@ -240,6 +270,7 @@ export async function suggestFieldTypesInternal(
     const suggestions = await suggestFieldTypesWithAI(
       parsedFiles,
       INTERNAL_BOARD_MODEL_SCHEMA,
+      ocrModelOptions,
     );
 
     const response: ApiResponse<FieldTypeSuggestion[]> = {
