@@ -127,27 +127,17 @@ export async function suggestFieldTypes(
       return;
     }
 
-    const { file_urls, model_name, provider_id, organization_id } =
-      parseResult.data;
-
-    // Resolve board schema URL — use provided value or build from config
-    const boardSchemaUrl = config.dataBoard.url
-      ? `${config.webApp.url}/${config.webApp.appgateway}/backend/board/model-schema`
-      : null;
-
-    if (!boardSchemaUrl) {
-      res.status(400).json({
-        success: false,
-        error:
-          "board_schema_url is required when DATA_BOARD_URL is not configured",
-        timestamp: new Date().toISOString(),
-      } satisfies ApiResponse);
-      return;
-    }
+    const {
+      file_urls,
+      model_name,
+      provider_id,
+      organization_id,
+      board_schema_url,
+    } = parseResult.data;
 
     logger.info("Field type suggestion request received", {
       fileCount: file_urls.length,
-      boardSchemaUrl,
+      boardSchemaUrl: board_schema_url ?? "(using INTERNAL_BOARD_MODEL_SCHEMA)",
     });
 
     // Build OCR model options when the caller supplies a specific vision model
@@ -173,11 +163,13 @@ export async function suggestFieldTypes(
       })),
     });
 
-    // Step 2: Fetch board model schema
-    const boardSchema = await fetchBoardModelSchema(
-      boardSchemaUrl,
-      xAccessToken,
-    );
+    // Step 2: Resolve board model schema — fetch only when the caller supplied
+    // an explicit URL; otherwise use the in-process constant (parity with the
+    // internal variant; avoids a fragile cross-service call to a legacy
+    // endpoint that no longer exists in the microservice architecture).
+    const boardSchema = board_schema_url
+      ? await fetchBoardModelSchema(board_schema_url, xAccessToken)
+      : INTERNAL_BOARD_MODEL_SCHEMA;
 
     // Step 3: Ask AI to suggest field types
     const suggestions = await suggestFieldTypesWithAI(parsedFiles, boardSchema);
