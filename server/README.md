@@ -3,8 +3,8 @@
 Express + TypeScript backend for AI features (embedding, chat agent, MCP, trace, data-board AI).
 This is the service `marketplace` / `app-gateway` call into for AI flows. Runs on **`:7100`**.
 
-> **Open-source edition**: this server does **not** implement `assistant_apps` / `assistants`(create) /
-> `guardrail` (paid features). See [Edition / limitations](#edition--limitations).
+> **Service split**: assistant CRUD (`assistant_apps`, `assistants`, `guardrail`) is handled by the
+> **`chat-ai`** service, not this one. See [Service split / limitations](#service-split--limitations).
 
 ---
 
@@ -47,6 +47,7 @@ MONGODB_URI=mongodb://localhost:27017/messagesuggestion
 ```
 
 Optional:
+
 - `AISDK_CHAT_CLIENT_POSTGRES_URL` — Postgres for the chat client. **Optional**: leave it empty and the
   chat-client routes are disabled, the server still runs normally.
 - `OPENAI_API_KEY` + `OPENAI_PROXY_URL` — needed for real LLM calls (embedding / chat).
@@ -82,26 +83,39 @@ curl http://localhost:7100/api/health        # detailed health (db/redis/bus)
 
 ## API (mounted at `/api`, NO `/api/v1`)
 
-| Group | Route |
-|---|---|
-| System | `/api/config`, `/api/health`, `/api/version` |
-| Embedding | `/api/embedding/*` |
-| Chat agent | `/api/chat`, `/api/v2/chat` |
-| MCP | `/api/mcp/*` |
-| Trace (Tempo) | `/api/trace/*` |
-| Parquet | `/api/parquet/*` |
-| Chat client | `/api/chat-client/*` |
-| Data Board AI | `/api/data-board/suggest-field-types`, `/api/databoard/:id`, `/api/databoards` |
-| Sub-agent guides | `/api/admin/guides/*` |
-| Assistant **config** | `/api/assistants/*` (vibe-code config only: manifest / import-config / effective-config) |
+| Group                     | Route                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| System                    | `/api/config`, `/api/health`, `/api/version`                                         |
+| Embedding                 | `/api/embedding/*`                                                                       |
+| Chat agent                | `/api/chat`, `/api/v2/chat`                                                            |
+| MCP                       | `/api/mcp/*`                                                                             |
+| Trace (Tempo)             | `/api/trace/*`                                                                           |
+| Parquet                   | `/api/parquet/*`                                                                         |
+| Chat client               | `/api/chat-client/*`                                                                     |
+| Data Board AI             | `/api/data-board/suggest-field-types`, `/api/databoard/:id`, `/api/databoards`       |
+| Sub-agent guides          | `/api/admin/guides/*`                                                                    |
+| Assistant**config** | `/api/assistants/*` (vibe-code config only: manifest / import-config / effective-config) |
 
 ---
 
-## Edition / limitations
+## Service split / limitations
 
-- **Not available**: `POST /api/v1/assistant_apps`, `/assistants` (create), `/guardrail`. As a result the
-  marketplace flow `POST /v3/use-cases/v2/custom` (creating an AI assistant) returns **500** locally —
-  marketplace calls `assistant_apps` and gets a 404. This is a paid feature, absent from the open-source
-  edition. To use it, point `AI_SERVICE`/`AI_SERVICE_V2` (on the marketplace side) at an AI-v2 backend
-  that implements it.
-- Routes are mounted at `/api` (note: clients/marketplace calling `/api/v1/...` will get a 404).
+- **Handled by another service**: `POST /api/v1/assistant_apps` and `/api/v1/assistants` (create) are
+  **not** paid features — they live in the **`chat-ai`** service (the AI-v2 backend, default `:8080`),
+  which ships them in the Community Edition (`assistant_apps.router` and `assistants.router` are
+  mounted in `chat-ai/backend/open_webui/main.py`).
+- **Not available in the open-source edition**: `guardrail.`
+- **Why `POST /v3/use-cases/v2/custom` returns 500 locally**: marketplace resolves the AI-v2 base URL
+  from `AI_SERVICE_V2`, which **falls back to `http://localhost:7100` — this server** — so the call
+  lands on `/api/v1/assistant_apps` here and gets a 404. It is a **routing** problem, not a missing
+  feature. Fix it by pointing marketplace at chat-ai:
+
+  ```env
+  # marketplace/.env
+  AI_SERVICE_V2=http://localhost:8080   # chat-ai (AI-v2 backend)
+  AI_SERVICE=http://localhost:7100      # this server
+  ```
+  (`marketplace/.env.example` already has the correct values; the 500 only appears when `.env` is
+  missing or `AI_SERVICE_V2` is unset.)
+- Routes here are mounted at `/api`, **not** `/api/v1` — any client calling `/api/v1/...` on `:7100`
+  will get a 404.
