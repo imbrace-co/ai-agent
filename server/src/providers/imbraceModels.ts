@@ -97,11 +97,11 @@ async function fetchCustomProviderConfig(
   modelId?: string;
 } | null> {
   // Reason: read the provider over chat-ai's internal surface
-  // (AI_SERVICE_V2_INTERNAL_URL → /api/v1/providers/:id, authed with
-  // x-api-key). Only that surface returns api_key UNMASKED — the public
-  // gateway path (/v3/ai/providers) runs chat-ai's mask_config, replacing
-  // secrets with bullets, and every non-vLLM branch below then throws for
-  // want of a key. It also avoids the gateway 404: ai-agent used to call
+  // (AI_SERVICE_V2_INTERNAL_URL → /api/v1/providers/:id). chat-ai returns
+  // secrets UNMASKED only when x-internal-service-key matches its
+  // INTERNAL_SERVICE_KEY (set it to AI_SERVICE_V2_API_KEY); otherwise they come
+  // back masked with bullets and every non-vLLM branch below throws for want
+  // of a key. It also avoids the gateway 404: ai-agent used to call
   // `${webApp.url}/api/v3/ai/...`, but the gateway mounts the AI router at
   // `/v3/ai` (no `/api` prefix), so that path never matched. Falls back to
   // the public path when the internal URL is unset (masked but still tells
@@ -116,6 +116,8 @@ async function fetchCustomProviderConfig(
   };
   if (internalBase) {
     headers["x-api-key"] = config.aiv2Internal.apiKey;
+    // chat-ai returns unmasked credentials only when this matches its INTERNAL_SERVICE_KEY.
+    headers["x-internal-service-key"] = config.aiv2Internal.apiKey;
   } else {
     Object.assign(headers, credentialHeader(xAccessToken));
   }
