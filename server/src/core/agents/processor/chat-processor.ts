@@ -204,10 +204,21 @@ export async function processChatStream(
       { ...context, assistant },
       options,
     );
-    return new Response(result.text, {
-      status: result.success ? 200 : 500,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    const textPartId = `text-${Date.now()}`;
+    const stream = createUIMessageStream({
+      execute: ({ writer }) => {
+        writer.write({ type: "start" });
+        if (result.success) {
+          writer.write({ type: "text-start", id: textPartId });
+          writer.write({ type: "text-delta", id: textPartId, delta: result.text });
+          writer.write({ type: "text-end", id: textPartId });
+        } else {
+          writer.write({ type: "error", errorText: result.error || result.text || "Chat failed" });
+        }
+        writer.write({ type: "finish" });
+      },
     });
+    return createUIMessageStreamResponse({ stream, status: result.success ? 200 : 500 });
   }
 
   // Resolve AI model
