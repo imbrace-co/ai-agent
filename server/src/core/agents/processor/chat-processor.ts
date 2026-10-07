@@ -205,7 +205,13 @@ export async function processChatStream(
       options,
     );
     const textPartId = `text-${Date.now()}`;
+    if (!result.success && options.errorCapture && !options.errorCapture.errorText) {
+      options.errorCapture.errorText = result.error || result.text || "Chat failed";
+    }
     const stream = createUIMessageStream({
+      // Persist the answer like the streaming path does; the chat UI reloads the
+      // conversation from the server after the stream ends.
+      ...(options.onStreamFinish ? { onFinish: options.onStreamFinish } : {}),
       execute: ({ writer }) => {
         writer.write({ type: "start" });
         if (result.success) {
